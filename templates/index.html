@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>纳斯达克100 ETF 数据看板</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { font-size: 14px; background: #f5f7fa; }
+        .header { background: linear-gradient(135deg, #1a237e, #283593); color: white; padding: 20px 0; margin-bottom: 20px; }
+        .header h1 { font-size: 1.5rem; margin: 0; }
+        .header .update-time { font-size: 0.85rem; opacity: 0.8; }
+
+        /* 表格容器 - 横向滚动 */
+        .table-wrapper { overflow-x: auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .table-wrapper table { margin: 0; white-space: nowrap; font-size: 13px; }
+        .table-wrapper th { background: #e8eaf6; color: #1a237e; font-weight: 600; position: sticky; top: 0; z-index: 2; }
+        .table-wrapper td { vertical-align: middle; }
+
+        /* 冻结列 */
+        .sticky-col { position: sticky; left: 0; background: white; z-index: 3; }
+        .sticky-col-2 { position: sticky; left: 70px; background: white; z-index: 3; }
+        .table-wrapper th.sticky-col { background: #e8eaf6; }
+        .table-wrapper th.sticky-col-2 { background: #e8eaf6; }
+
+        /* 提醒颜色 */
+        .alert-red { background-color: #fee2e2 !important; color: #b91c1c; font-weight: 600; }
+        .alert-green { background-color: #dcfce7 !important; color: #15803d; font-weight: 600; }
+        .alert-orange { background-color: #fef3c7 !important; color: #b45309; font-weight: 600; }
+
+        /* 列分组标题 */
+        .col-group { text-align: center !important; font-size: 12px; background: #c5cae9 !important; }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .table-wrapper table { font-size: 12px; }
+            .header h1 { font-size: 1.2rem; }
+        }
+
+        /* 图例 */
+        .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0; font-size: 12px; }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        .legend-color { width: 16px; height: 16px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1>纳斯达克100 ETF 数据看板</h1>
+                    <div class="update-time">数据更新于: {{ updated_at }}</div>
+                </div>
+                <div class="text-end">
+                    <button class="btn btn-sm btn-outline-light" onclick="refreshData()">刷新数据</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid px-3">
+        <!-- 提醒图例 -->
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color" style="background:#fee2e2;border:1px solid #fca5a5"></div> 溢价率 &gt; 5% (高溢价风险)</div>
+            <div class="legend-item"><div class="legend-color" style="background:#dcfce7;border:1px solid #86efac"></div> 溢价率 &lt; -3% (折价机会)</div>
+            <div class="legend-item"><div class="legend-color" style="background:#fef3c7;border:1px solid #fcd34d"></div> 距52周高 &lt; 5% (接近新高)</div>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="table-wrapper">
+            <table class="table table-bordered table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="sticky-col" style="min-width:70px">代码</th>
+                        <th rowspan="2" class="sticky-col-2" style="min-width:120px">名称</th>
+                        <th colspan="6" class="col-group">核心行情</th>
+                        <th colspan="4" class="col-group">均线指标</th>
+                        <th colspan="4" class="col-group">52周区间</th>
+                        <th colspan="6" class="col-group">区间涨幅</th>
+                        <th rowspan="2" class="col-group">溢价率</th>
+                    </tr>
+                    <tr>
+                        <th>最新价</th>
+                        <th>涨跌额</th>
+                        <th>涨跌幅(%)</th>
+                        <th>成交量</th>
+                        <th>成交额(万)</th>
+                        <th>开盘价</th>
+
+                        <th>50日线</th>
+                        <th>距50日(%)</th>
+                        <th>200日线</th>
+                        <th>距200日(%)</th>
+
+                        <th>52周最高</th>
+                        <th>52周最低</th>
+                        <th>距最高(%)</th>
+                        <th>距最低(%)</th>
+
+                        <th>近1周</th>
+                        <th>近1月</th>
+                        <th>近3月</th>
+                        <th>近6月</th>
+                        <th>近1年</th>
+                        <th>今年</th>
+                    </tr>
+                </thead>
+                <tbody id="data-body">
+                    {% for row in data %}
+                    <tr>
+                        <td class="sticky-col"><strong>{{ row['代码'] }}</strong></td>
+                        <td class="sticky-col-2">{{ row['名称'] }}</td>
+
+                        <!-- 核心行情 -->
+                        <td>{{ row['最新价'] }}</td>
+                        <td>{{ row['涨跌额'] }}</td>
+                        <td class="{{ 'alert-red' if (row['涨跌幅(%)'] or 0) > 3 else ('alert-green' if (row['涨跌幅(%)'] or 0) < -3 else '') }}">
+                            {{ row['涨跌幅(%)'] }}%
+                        </td>
+                        <td>{{ '{:,.0f}'.format(row['成交量']) if row['成交量'] else '-' }}</td>
+                        <td>{{ '{:,.0f}'.format(row['成交额']/10000) if row['成交额'] else '-' }}</td>
+                        <td>{{ row['开盘价'] }}</td>
+
+                        <!-- 均线指标 -->
+                        <td>{{ row['50日均线'] }}</td>
+                        <td>{{ row['距50日线(%)'] }}%</td>
+                        <td>{{ row['200日均线'] }}</td>
+                        <td>{{ row['距200日线(%)'] }}%</td>
+
+                        <!-- 52周区间 -->
+                        <td>{{ row['52周最高'] }}</td>
+                        <td>{{ row['52周最低'] }}</td>
+                        <td class="{{ 'alert-orange' if (row['距52周高(%)'] or 0) > -5 else '' }}">
+                            {{ row['距52周高(%)'] }}%
+                        </td>
+                        <td>{{ row['距52周低(%)'] }}%</td>
+
+                        <!-- 区间涨幅 -->
+                        <td>{{ row['近1周涨幅'] }}%</td>
+                        <td>{{ row['近1月涨幅'] }}%</td>
+                        <td>{{ row['近3月涨幅'] }}%</td>
+                        <td>{{ row['近6月涨幅'] }}%</td>
+                        <td>{{ row['近1年涨幅'] }}%</td>
+                        <td>{{ row['今年涨幅'] }}%</td>
+
+                        <!-- 溢价率 -->
+                        <td class="{{ 'alert-red' if (row['溢价率(%)'] or 0) > 5 else ('alert-green' if (row['溢价率(%)'] or 0) < -3 else '') }}">
+                            {{ row['溢价率(%)'] }}%
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 底部说明 -->
+        <div class="text-center text-muted mt-3 mb-3" style="font-size: 12px;">
+            数据来源: 腾讯财经(实时行情+IOPV) / 天天基金(历史净值) | 每日 5:00 自动更新
+        </div>
+    </div>
+
+    <script>
+        // 刷新数据（不刷新页面）
+        function refreshData() {
+            fetch('/api/data')
+                .then(r => r.json())
+                .then(data => {
+                    // 更新页面数据
+                    const tbody = document.getElementById('data-body');
+                    if (data.length > 0) {
+                        document.querySelector('.update-time').textContent = '数据更新于: ' + data[0]['日期'];
+                    }
+                    location.reload();
+                })
+                .catch(e => console.error('刷新失败:', e));
+        }
+
+        // 每5分钟自动检查更新
+        setInterval(() => {
+            fetch('/api/data')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.length > 0 && data[0]['日期'] !== document.querySelector('.update-time').textContent.replace('数据更新于: ', '')) {
+                        location.reload();
+                    }
+                })
+                .catch(() => {});
+        }, 300000);
+    </script>
+</body>
+</html>
